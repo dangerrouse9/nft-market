@@ -1,0 +1,14 @@
+{
+  "name": "@agent-nft/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "anchor build",
+    "deploy": "anchor deploy --provider.cluster devnet",
+    "test": "tsx --test tests/e2e.test.ts"
+  },
+  "dependencies": {
+    "@agent-nft/shared": "*"
+  }
+}

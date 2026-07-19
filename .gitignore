@@ -1,0 +1,11 @@
+node_modules/
+.env
+.keys/
+data/
+dist/
+.DS_Store
+
+# Anchor / Rust build output (IDL is copied to packages/shared/idl/ instead)
+packages/contracts/target/
+.anchor/
+test-ledger/
