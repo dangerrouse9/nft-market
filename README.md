@@ -84,6 +84,9 @@ cd ../..
 #    then set MARKETPLACE_PROGRAM_ID in .env to the printed program id
 
 # 5. Store the marketplace fee + fee wallet on-chain (one-time)
+#    SECURITY: run this IMMEDIATELY after deploy — config is first-come-first-
+#    served, so an unclaimed config could be initialized by someone else with
+#    their own fee wallet. (Matters most on mainnet.)
 npm run init-config
 
 # 6. Run the system (three terminals)

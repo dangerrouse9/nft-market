@@ -81,6 +81,10 @@ app.get('/listings/:tokenId', async (req, reply) => {
   return listing;
 });
 
+// Solana addresses are base58 — rejecting anything else up front means no
+// address field can ever smuggle a scheme/script into links the frontend builds.
+const B58 = '^[1-9A-HJ-NP-Za-km-z]{32,44}$';
+
 const newListingSchema = {
   body: {
     type: 'object',
@@ -94,14 +98,14 @@ const newListingSchema = {
       'sellerAgentAsset',
     ],
     properties: {
-      tokenId: { type: 'string', minLength: 32, maxLength: 64 },
+      tokenId: { type: 'string', pattern: B58 },
       contentUri: { type: 'string', maxLength: 512 },
       contentPreview: { type: 'string', maxLength: 400 },
       priceSOL: { type: 'number', exclusiveMinimum: 0 },
-      creatorAddress: { type: 'string', minLength: 32, maxLength: 64 },
-      sellerAddress: { type: 'string', minLength: 32, maxLength: 64 },
-      sellerAgentAsset: { type: 'string', minLength: 32, maxLength: 64 },
-      collection: { type: 'string', maxLength: 64 },
+      creatorAddress: { type: 'string', pattern: B58 },
+      sellerAddress: { type: 'string', pattern: B58 },
+      sellerAgentAsset: { type: 'string', pattern: B58 },
+      collection: { type: 'string', pattern: B58 },
     },
   },
 } as const;
@@ -112,30 +116,36 @@ app.post(
   async (req, reply) => {
     const body = req.body as Omit<Listing, 'listedAt' | 'status' | 'soldAt' | 'buyerAddress'>;
 
-    // 1. The seller must be a registered agent that owns its identity asset.
-    if (!SKIP_AGENT_CHECK) {
-      const agent = await verifyAgent(RPC_URL, body.sellerAgentAsset, body.sellerAddress);
-      if (!agent.ok) {
-        return reply.code(403).send({ error: `agent verification failed: ${agent.reason}` });
-      }
-    }
-
-    // 2. The NFT must be genuinely escrowed on-chain at the stated price.
     let royaltyBps: number | undefined;
     let creatorAddress = body.creatorAddress;
-    if (PROGRAM_ID) {
-      const chain = await verifyListingOnChain(
-        RPC_URL,
-        PROGRAM_ID,
-        body.tokenId,
-        body.sellerAddress,
-        body.priceSOL,
-      );
-      if (!chain.ok) {
-        return reply.code(403).send({ error: `on-chain verification failed: ${chain.reason}` });
+    try {
+      // 1. The seller must be a registered agent that owns its identity asset.
+      if (!SKIP_AGENT_CHECK) {
+        const agent = await verifyAgent(RPC_URL, body.sellerAgentAsset, body.sellerAddress);
+        if (!agent.ok) {
+          return reply.code(403).send({ error: `agent verification failed: ${agent.reason}` });
+        }
       }
-      royaltyBps = chain.royaltyBps;
-      creatorAddress = chain.creatorAddress ?? creatorAddress;
+
+      // 2. The NFT must be genuinely escrowed on-chain at the stated price.
+      if (PROGRAM_ID) {
+        const chain = await verifyListingOnChain(
+          RPC_URL,
+          PROGRAM_ID,
+          body.tokenId,
+          body.sellerAddress,
+          body.priceSOL,
+        );
+        if (!chain.ok) {
+          return reply.code(403).send({ error: `on-chain verification failed: ${chain.reason}` });
+        }
+        royaltyBps = chain.royaltyBps;
+        creatorAddress = chain.creatorAddress ?? creatorAddress;
+      }
+    } catch (err: any) {
+      // Malformed addresses or RPC hiccups are a client/availability problem,
+      // never a server crash
+      return reply.code(400).send({ error: `verification error: ${err.message}` });
     }
 
     const listing: Listing = {
