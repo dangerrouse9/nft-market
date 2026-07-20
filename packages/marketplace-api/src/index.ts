@@ -18,7 +18,8 @@ import { Reconciler } from './reconciler';
 import { verifyAgent, verifyListingOnChain } from './verify';
 
 loadEnv();
-const PORT = envNum('MARKETPLACE_PORT', 3000);
+// Hosted platforms (Railway) assign the port via PORT; locally we default to 3000
+const PORT = envNum('PORT', envNum('MARKETPLACE_PORT', 3000));
 const RPC_URL = envStr('SOLANA_RPC_URL', 'https://api.devnet.solana.com');
 const NETWORK = envStr('SOLANA_NETWORK', 'devnet');
 const DATA_DIR = resolveFromRoot(envStr('DATA_DIR', 'data'));
