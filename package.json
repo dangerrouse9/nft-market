@@ -6,7 +6,11 @@
   "workspaces": [
     "packages/*"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "start": "npm start --workspace packages/${SERVICE_PKG:-marketplace-api}",
     "api": "npm start --workspace packages/marketplace-api",
     "creator": "npm start --workspace packages/creator-agent",
     "buyer": "npm start --workspace packages/buyer-agent",
