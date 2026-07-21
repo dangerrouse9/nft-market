@@ -1,4 +1,10 @@
-import { AnchorProvider, BN, Program } from '@anchor-lang/core';
+// Default-import the whole module, then destructure. `@anchor-lang/core` is
+// CommonJS; a named ESM import (`import { BN }`) only works on Node versions
+// whose CJS-export detection picks up BN — Node 20 does not, Node 24 does.
+// The default import is the module.exports object and works everywhere.
+import anchor from '@anchor-lang/core';
+import type { Program as ProgramType } from '@anchor-lang/core';
+const { AnchorProvider, BN, Program } = anchor;
 import {
   Connection,
   Keypair,
@@ -60,7 +66,7 @@ class KeypairWallet {
 
 export class MarketplaceClient {
   readonly connection: Connection;
-  readonly program: Program;
+  readonly program: ProgramType;
   readonly keypair: Keypair;
 
   constructor(rpcUrl: string, keypair: Keypair, programId?: string) {

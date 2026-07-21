@@ -1,6 +1,6 @@
 # One image for all three services; SERVICE_PKG (set per Railway service)
 # selects which workspace's `start` script runs.
-FROM node:20-slim
+FROM node:24-slim
 
 WORKDIR /app
 
