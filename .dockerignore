@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+.git
+packages/contracts/target
+.anchor
+test-ledger
+data
+.keys
+.env
+*.log
