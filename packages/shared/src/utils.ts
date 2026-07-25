@@ -31,3 +31,42 @@ export function shortAddress(address: string): string {
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** True if an error looks like an RPC/API rate-limit (HTTP 429). */
+export function isRateLimit(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return m.includes('429') || m.includes('too many requests') || m.includes('rate limit');
+}
+
+export interface RetryOptions {
+  attempts?: number;
+  baseMs?: number;
+  maxMs?: number;
+  /** Return false to stop retrying and rethrow immediately (default: always retry) */
+  retryable?: (err: unknown) => boolean;
+  onRetry?: (err: unknown, attempt: number, delayMs: number) => void;
+}
+
+/**
+ * Retries an async operation with exponential backoff + jitter. Used to ride
+ * out transient RPC 429s and propagation races on public Solana endpoints.
+ */
+export async function retry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
+  const attempts = opts.attempts ?? 6;
+  const base = opts.baseMs ?? 1_000;
+  const max = opts.maxMs ?? 30_000;
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (opts.retryable && !opts.retryable(err)) throw err;
+      if (i === attempts - 1) break;
+      const delay = Math.min(max, base * 2 ** i) + Math.floor(Math.random() * 300);
+      opts.onRetry?.(err, i + 1, delay);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
