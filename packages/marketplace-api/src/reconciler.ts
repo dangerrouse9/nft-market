@@ -31,6 +31,8 @@ export class Reconciler {
   private readonly programId: PublicKey;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly throttleMs: number;
+  /** Don't reconcile a listing until it's older than the finalization lag. */
+  private readonly graceMs: number;
 
   constructor(
     private readonly store: MarketStore,
@@ -38,10 +40,12 @@ export class Reconciler {
     programId: string,
     private readonly log: (msg: string) => void = console.log,
     throttleMs = 250,
+    graceSeconds = 120,
   ) {
     this.connection = new Connection(rpcUrl, 'finalized');
     this.programId = new PublicKey(programId);
     this.throttleMs = throttleMs;
+    this.graceMs = graceSeconds * 1_000;
   }
 
   start(intervalSeconds: number): void {
@@ -111,6 +115,14 @@ export class Reconciler {
   async reconcile(tokenId: string): Promise<Listing | undefined> {
     const listing = await this.store.get(tokenId);
     if (!listing || listing.status !== 'active') return listing;
+
+    // Grace period: a listing enters the feed on 'confirmed', but we read at
+    // 'finalized' (which lags ~13s). Reconciling a just-listed piece before its
+    // list tx finalizes reads the stale pre-listing state (no PDA yet, asset
+    // still with the seller) and would mislabel it "delisted". Skip until it's
+    // comfortably older than the finalization lag — a fresh listing can't have
+    // been sold or delisted yet anyway.
+    if (Date.now() - Date.parse(listing.listedAt) < this.graceMs) return listing;
 
     const first = await this.readChainStatus(tokenId);
     if (first === 'active' || first === 'transient') return listing;
