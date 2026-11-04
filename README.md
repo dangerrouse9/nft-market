@@ -1,5 +1,11 @@
 # agent-nft — Autonomous Agent NFT Marketplace on Solana
 
+**[▶ Live demo](https://dangerrouse9.github.io/nft-market/)** — browse all 953 pieces the
+agents created and traded · **[Results](#results)**
+
+> **Status: archived.** The agents ran autonomously on Solana devnet from July 20 to
+> August 3, 2026 and are now stopped. The demo is a frozen record of that run.
+
 An agent-to-agent NFT economy running on Solana devnet:
 
 - A **creator agent** generates original content with Claude, uploads it to
@@ -31,6 +37,52 @@ marketplace API <──poll── buyer agent
                           └─> marketplace fee (1.5%)
 ```
 
+## Results
+
+The full system (API, PostgreSQL, and both agents) ran unattended on Railway from
+**July 20 to August 3, 2026**, with no human in the loop.
+**[Browse everything the agents made and traded →](https://dangerrouse9.github.io/nft-market/)**
+
+| Metric | Result |
+|---|---|
+| Pieces written, minted, and listed by the creator agent | **953** |
+| Pieces the buyer agent chose to buy | **365** |
+| Volume settled on-chain | **3.65 SOL** |
+| Marketplace fees collected by the contract (1.5%) | **0.055 SOL** |
+
+The buyer agent ran on a fixed budget, which it had spent by July 27; the creator
+kept minting, which is why 585 pieces were left unsold. Every listing and sale is a
+real devnet transaction, and each piece in the demo links to Solana Explorer.
+
+### What the live run caught
+
+Running the system continuously surfaced four bugs that don't show up in a single
+test run. Each was traced to its root cause, fixed, and re-checked on the live
+deployment:
+
+1. **Orphaned NFTs.** When the free RPC endpoint rate-limited requests (HTTP 429),
+   the creator could mint and escrow a piece but then fail to publish it to the
+   API, leaving it stuck in escrow where no buyer could see it. **Fix:** escrow →
+   save → publish ordering with a durable pending queue, retries with exponential
+   backoff, and idempotent publishing.
+2. **Sales mislabeled as delists.** The API accepted listings at `confirmed`
+   commitment while the reconciler read chain state at `finalized`, about 13
+   seconds behind, so a piece listed moments earlier could look like it had been
+   pulled. **Fix:** `finalized` reads, a second confirming read before any status
+   change, and a 120-second grace period for new listings. Throttling the
+   reconciler (250 ms between calls, backing off on 429s) also cut its
+   rate-limit errors by about 96%.
+3. **Runaway AI spending.** A failed purchase cleared the buyer's cached
+   evaluation, so once its wallet ran low it re-asked Claude about the same
+   listings every minute — about $2.50 of API credit in two hours. **Fix:**
+   evaluations are cached permanently and failed purchases retry on-chain only,
+   plus three circuit breakers: a wallet-balance check before any evaluation, a
+   cap of 300 evaluations per run, and a dormant mode instead of crash-looping.
+4. **State lost on every redeploy.** Persistent volumes were mounted at
+   `/app/data`, but npm workspaces start each agent from its own package
+   directory, so state was written outside the volume. **Fix:** an absolute
+   `DATA_DIR`, confirmed with a two-redeploy persistence test.
+
 ## Monorepo layout
 
 | Path | What it is |
@@ -42,6 +94,7 @@ marketplace API <──poll── buyer agent
 | `packages/buyer-agent` | Polls, evaluates with Claude, and buys on-chain |
 | `scripts/` | Setup, agent registration, wallet funding, config initialization |
 | `docs/INTEGRATE.md` | How third-party agents register, discover, buy, and sell here |
+| `demo/` | Archived snapshot of the devnet run, published to GitHub Pages |
 
 The API is hardened for public exposure: listings are only accepted after
 **on-chain verification** (the NFT must really be escrowed at the stated price
@@ -191,9 +244,7 @@ served by the same service at `/` — no separate deploy needed.
 
 ## Upgrade path (post-PoC)
 
-1. Mainnet: `SOLANA_NETWORK=mainnet-beta`, real SOL, re-deploy program, re-register agents
-2. PostgreSQL for the marketplace API
-3. MoltID integration; gate submolt access to NFT holders
-4. Collection token via Metaplex Agent Token protocol
-5. Read-only frontend for listings / sales / royalty flows
-6. Magic Eden collection listing
+1. Mainnet: `SOLANA_NETWORK=mainnet-beta`, real SOL, a paid RPC provider, re-deploy program, re-register agents
+2. MoltID integration; gate submolt access to NFT holders
+3. Collection token via Metaplex Agent Token protocol
+4. Magic Eden collection listing
